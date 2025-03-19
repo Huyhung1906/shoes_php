@@ -1,42 +1,39 @@
 <?php
 session_start();
-require('config.php'); // Kết nối database
+require('../config.php'); // Kết nối database
 
 $error_msg = "";
+$success_msg = "";
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $username = isset($_POST['username']) ? trim($_POST['username']) : '';
-    $password = isset($_POST['password']) ? trim($_POST['password']) : '';
 
-    if (!empty($username) && !empty($password)) {
-        $stmt = $conn->prepare("SELECT id_user, username, passwordhash, id_role, is_active FROM user WHERE username = :username");
+    if (!empty($username)) {
+        // Kiểm tra tài khoản có tồn tại không
+        $stmt = $conn->prepare("SELECT id_user FROM user WHERE username = :username");
         $stmt->bindParam(':username', $username);
         $stmt->execute();
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($user) {
-            if ($user['is_active'] == 0) {
-                $error_msg = "Tài khoản của bạn đã bị khóa!";
-            } elseif (password_verify($password, $user['passwordhash'])) {
-                $_SESSION['username'] = $user['username']; 
-                $_SESSION['id_role'] = $user['id_role'];
-                $_SESSION['id_user'] = $user['id_user'];
-                
-                if ($user['id_role'] == 1) {
-                    $_SESSION['admin_logged_in'] = true;
-                    header("Location: admin/index.php");
-                } else {
-                    header("Location: user/index.php");
-                }
-                exit();
+        if ($stmt->rowCount() > 0) {
+            // Tạo mật khẩu mới ngẫu nhiên
+            $new_password = substr(str_shuffle('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'), 0, 8);
+            $hashed_password = password_hash($new_password, PASSWORD_DEFAULT);
+
+            // Cập nhật mật khẩu mới vào database
+            $stmt = $conn->prepare("UPDATE user SET passwordhash = :password WHERE username = :username");
+            $stmt->bindParam(':password', $hashed_password);
+            $stmt->bindParam(':username', $username);
+
+            if ($stmt->execute()) {
+                $success_msg = "Mật khẩu mới của bạn là: <strong>$new_password</strong>. Hãy đăng nhập và đổi mật khẩu ngay!";
             } else {
-                $error_msg = "Sai tài khoản hoặc mật khẩu!";
+                $error_msg = "Có lỗi xảy ra, vui lòng thử lại!";
             }
         } else {
-            $error_msg = "Tài khoản không tồn tại!";
+            $error_msg = "Tên đăng nhập không tồn tại!";
         }
     } else {
-        $error_msg = "Vui lòng nhập đầy đủ thông tin!";
+        $error_msg = "Vui lòng nhập tên đăng nhập!";
     }
 }
 ?>
@@ -46,8 +43,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Đăng nhập</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <title>Quên mật khẩu</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css">
     <style>
         body {
@@ -59,7 +56,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             padding: 20px;
         }
 
-        .login-container {
+        .forgot-container {
             max-width: 450px;
             width: 100%;
             background: rgba(255, 255, 255, 0.95);
@@ -70,7 +67,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             transition: transform 0.3s ease;
         }
 
-        .login-container:hover {
+        .forgot-container:hover {
             transform: translateY(-5px);
         }
 
@@ -91,7 +88,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.25);
         }
 
-        .btn-login {
+        .btn-reset {
             background: #667eea;
             border: none;
             padding: 12px;
@@ -101,25 +98,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             transition: all 0.3s ease;
         }
 
-        .btn-login:hover {
+        .btn-reset:hover {
             background: #5a67d8;
             transform: translateY(-2px);
-        }
-
-        .btn-google {
-            background: #ffffff;
-            color: #666;
-            border: 1px solid #ddd;
-            padding: 12px;
-            border-radius: 8px;
-            font-weight: 500;
-            transition: all 0.3s ease;
-        }
-
-        .btn-google:hover {
-            background: #f8f9fa;
-            transform: translateY(-2px);
-            color: #444;
         }
 
         .alert {
@@ -147,32 +128,23 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h3 class="text-center">Đăng nhập</h3>
+    <div class="forgot-container">
+        <h3 class="text-center">Quên mật khẩu</h3>
         <?php if (!empty($error_msg)): ?>
             <div class="alert alert-danger text-center"><?php echo $error_msg; ?></div>
         <?php endif; ?>
+        <?php if (!empty($success_msg)): ?>
+            <div class="alert alert-success text-center"><?php echo $success_msg; ?></div>
+        <?php endif; ?>
         <form method="POST">
-            <div class="mb-3">
+            <div class="mb-4">
                 <label for="username" class="form-label">Tên đăng nhập</label>
                 <input type="text" class="form-control" id="username" name="username" required>
             </div>
-            <div class="mb-4">
-                <label for="password" class="form-label">Mật khẩu</label>
-                <input type="password" class="form-control" id="password" name="password" required>
-            </div>
-            <button type="submit" class="btn btn-login w-100 text-white">Đăng nhập</button>
+            <button type="submit" class="btn btn-reset w-100 text-white">Lấy lại mật khẩu</button>
         </form>
-        <div class="text-center mt-3">
-            <a href="user/forgot_password.php" class="text-link">Quên mật khẩu?</a>
-        </div>
-        <div class="text-center mt-3">
-            <p class="mb-2">Chưa có tài khoản? <a href="user/register.php" class="text-link">Đăng ký ngay</a></p>
-        </div>
-        <div class="mt-4">
-            <a href="<?php echo $google_login_url; ?>" class="btn btn-google w-100">
-                <i class="bi bi-google me-2"></i>Đăng nhập bằng Google
-            </a>
+        <div class="text-center mt-4">
+            <a href="../login.php" class="text-link">Quay lại đăng nhập</a>
         </div>
     </div>
 
